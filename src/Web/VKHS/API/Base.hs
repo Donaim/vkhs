@@ -27,6 +27,8 @@ import qualified Data.Aeson.Encode.Pretty as Aeson
 import Web.VKHS.Imports
 import Web.VKHS.Types
 
+import Network.URI
+
 -- | Alias for 'Result'
 type R t a = APIRoutine t a
 
@@ -125,8 +127,13 @@ api :: (MonadAPI m x s) => MethodName -> MethodArgs -> API m x JSON
 api mname margs = raiseVK (ExecuteAPI (mname,margs))
 
 -- | Perform custom HTTP request
-request :: (MonadAPI m x s) => URL -> API m x JSON
-request url = raiseVK (ExecuteRequest url)
+request :: (MonadAPI m x s) => HRef -> API m x JSON
+request ref = raiseVK parse
+  where
+    parse = do
+    case parseURI (show (href ref)) of
+      Just url -> ExecuteRequest (URL url)
+      Nothing -> error (show $ href ref)
 
 -- | Upload File to server
 upload :: (MonadAPI m x s) => HRef -> FilePath -> API m x UploadRecord
