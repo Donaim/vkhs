@@ -1,4 +1,4 @@
-resolver: lts-9.0
+resolver: lts-10.10
 extra-deps:
 - mtlparse-0.1.4.0@sha256:82d7fb37f5633b4cb3d6ac4ef325cd660282cbc265547d82ce23f3f9f8e5b352
 - pipes-http-1.0.5@sha256:cf863d984190162475447374eef4939a729dce51857ea9077de374eff3f9fdc8
