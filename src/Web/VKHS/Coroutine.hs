@@ -208,17 +208,17 @@ executeAPI mname margs = do
 
 executeRequest :: (MonadIO m) => URL -> StateT VKState (ExceptT VKError m) JSON
 executeRequest url = do
-  let throwAPIError x = throwError (VKExecRequestError url x)
+  let throwRequestError x = throwError (VKExecRequestError url x)
   mreq <- requestCreateGet url (cookiesCreate ())
   case mreq of
     Left err -> do
-      throwAPIError (Left err)
+      throwRequestError (Left err)
     Right req -> do
       (res, jar') <- requestExecute req
       bsjson <- pure $ responseBody res
       case decodeJSON bsjson of
         Left err -> do
-          throwAPIError (Right $ VKJSONDecodeError err bsjson)
+          throwRequestError (Right $ VKJSONDecodeError err bsjson)
         Right json -> do
           lldebug $ "< " <> jsonEncodePretty json
           return json
