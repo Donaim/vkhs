@@ -345,7 +345,7 @@ apiSupervisor = go where
         go (k json)
 
       ExecuteRequest url k -> do
-        json <- undefined
+        json <- executeRequest url
         go (k json)
 
       UploadFile (href,filepath) k -> do
