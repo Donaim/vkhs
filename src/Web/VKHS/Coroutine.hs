@@ -132,7 +132,7 @@ data VKError =
   | VKLoginError LoginError
   | VKLoginRequestError ClientError
   | VKUploadError FilePath (Either ClientError VKJSONError)
-  | VKExecAPIError MethodName (Either ClientError VKJSONError)
+  | VKExecRequestError URL (Either ClientError VKJSONError)
   | VKAPIError APIError
   deriving(Show)
 
@@ -143,8 +143,8 @@ printVKError = \case
   VKLoginError e -> printLoginError e
   VKUploadError fpath e ->
     "Failed to upload file \"" <> tpack fpath <> "\": " <> either printClientError printVKJSONError e
-  VKExecAPIError mname e ->
-    "Failed execute method \"" <> tpack mname <> "\": " <> either printClientError printVKJSONError e
+  VKExecRequestError url e ->
+    "Failed execute method \"" <> tpack (show url) <> "\": " <> either printClientError printVKJSONError e
   VKAPIError e ->
     "API program failed: " <> printAPIError e
   VKLoginRequestError ce ->
@@ -174,8 +174,6 @@ executeAPI mname margs = do
   GenericOptions{..} <- gets toGenericOptions
   APIState{..} <- gets toAPIState
 
-  let throwAPIError x = throwError (VKExecAPIError mname x)
-
   let protocol = (case o_use_https of
                     True -> "https"
                     False -> "http")
@@ -188,6 +186,29 @@ executeAPI mname margs = do
 
   lldebug $ "> " <> (tshow url)
 
+  json <- executeRequest url
+  case parseJSON json of
+    Left err -> do
+      return json {- not an error -}
+
+    Right (APIResponse _ (APIErrorRecord{..},_)) -> do
+      case er_code of
+        NotLoggedIn -> do
+          llalert $ "Attempting to re-login"
+          at <- loginSupervisor (loginRoutine >>= return . LoginOK)
+          modifyAccessToken at
+          executeAPI mname margs
+
+        TooManyRequestsPerSec -> do
+          llalert $ "Too many requests per second, consider changing options"
+          executeAPI mname margs
+
+        _ -> do
+          return json {- Allow application to handle the code -}
+
+executeRequest :: (MonadIO m) => URL -> StateT VKState (ExceptT VKError m) JSON
+executeRequest url = do
+  let throwAPIError x = throwError (VKExecRequestError url x)
   mreq <- requestCreateGet url (cookiesCreate ())
   case mreq of
     Left err -> do
@@ -200,26 +221,7 @@ executeAPI mname margs = do
           throwAPIError (Right $ VKJSONDecodeError err bsjson)
         Right json -> do
           lldebug $ "< " <> jsonEncodePretty json
-
-          case parseJSON json of
-            Left err -> do
-              return json {- not an error -}
-
-            Right (APIResponse _ (APIErrorRecord{..},_)) -> do
-              case er_code of
-                NotLoggedIn -> do
-                  llalert $ "Attempting to re-login"
-                  at <- loginSupervisor (loginRoutine >>= return . LoginOK)
-                  modifyAccessToken at
-                  executeAPI mname margs
-
-                TooManyRequestsPerSec -> do
-                  llalert $ "Too many requests per second, consider changing options"
-                  executeAPI mname margs
-
-                _ -> do
-                  return json {- Allow application to handle the code -}
-
+          return json
 
 uploadFile :: (FromJSON b, MonadError VKError m, MonadClient m s) => HRef -> String -> m b
 uploadFile href filepath = do
@@ -340,6 +342,10 @@ apiSupervisor = go where
 
       ExecuteAPI (mname,margs) k -> do
         json <- executeAPI mname (map (id *** tunpack) margs)
+        go (k json)
+
+      ExecuteRequest url k -> do
+        json <- undefined
         go (k json)
 
       UploadFile (href,filepath) k -> do
