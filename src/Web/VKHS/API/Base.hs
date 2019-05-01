@@ -40,6 +40,7 @@ data APIRoutine t a =
     Fine a
   | APIFailed APIError
   | ExecuteAPI (MethodName, MethodArgs) (JSON -> t (R t a) (R t a))
+  | ExecuteRequest HRef (JSON -> t (R t a) (R t a))
   | UploadFile (HRef,FilePath) (UploadRecord -> t (R t a) (R t a))
   | APILogin (AccessToken -> t (R t a) (R t a))
   | APIMessage Verbosity Text (() -> t (R t a) (R t a))
@@ -122,6 +123,10 @@ type API m x a = m (R m x) a
 -- | Perform API call
 api :: (MonadAPI m x s) => MethodName -> MethodArgs -> API m x JSON
 api mname margs = raiseVK (ExecuteAPI (mname,margs))
+
+-- | Perform custom HTTP request
+request :: (MonadAPI m x s) => HRef -> API m x JSON
+request url = raiseVK (ExecuteRequest url)
 
 -- | Upload File to server
 upload :: (MonadAPI m x s) => HRef -> FilePath -> API m x UploadRecord
